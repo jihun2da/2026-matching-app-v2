@@ -326,37 +326,69 @@ elif menu == "📊 DB 연동 상태":
     with tab_search:
         if 'master_search_query' not in st.session_state:
             st.session_state.master_search_query = ''
+        if 'master_search_col' not in st.session_state:
+            st.session_state.master_search_col = '전체 (브랜드 + 상품명 + 중도매)'
+
+        SEARCH_COL_OPTIONS = [
+            '전체 (브랜드 + 상품명 + 중도매)',
+            '브랜드',
+            '상품명',
+            '중도매',
+        ]
 
         with st.form("search_form"):
-            search_input = st.text_input(
-                "🔍 브랜드 또는 상품명 검색",
-                value=st.session_state.master_search_query,
-                placeholder="검색어 입력 후 검색 실행"
-            )
+            col_sel, col_inp = st.columns([2, 3])
+            with col_sel:
+                search_col = st.selectbox(
+                    "🗂️ 검색 컬럼 선택",
+                    options=SEARCH_COL_OPTIONS,
+                    index=SEARCH_COL_OPTIONS.index(st.session_state.master_search_col)
+                )
+            with col_inp:
+                search_input = st.text_input(
+                    "🔍 검색어 입력",
+                    value=st.session_state.master_search_query,
+                    placeholder="검색어 입력 후 검색 실행"
+                )
             col_s1, col_s2 = st.columns([3, 1])
             search_submit = col_s1.form_submit_button("🔍 검색 실행", use_container_width=True)
             clear_submit = col_s2.form_submit_button("초기화", use_container_width=True)
 
         if search_submit:
             st.session_state.master_search_query = search_input.strip()
+            st.session_state.master_search_col = search_col
         elif clear_submit:
             st.session_state.master_search_query = ''
+            st.session_state.master_search_col = SEARCH_COL_OPTIONS[0]
 
         search_query = st.session_state.master_search_query
+        search_col_saved = st.session_state.master_search_col
 
         if search_query:
             with get_db() as db:
-                results = db.query(MasterProduct).filter(
-                    or_(
+                if search_col_saved == '브랜드':
+                    search_filter = MasterProduct.brand.ilike(f'%{search_query}%')
+                elif search_col_saved == '상품명':
+                    search_filter = MasterProduct.product_name.ilike(f'%{search_query}%')
+                elif search_col_saved == '중도매':
+                    search_filter = MasterProduct.wholesale_name.ilike(f'%{search_query}%')
+                else:
+                    search_filter = or_(
                         MasterProduct.brand.ilike(f'%{search_query}%'),
-                        MasterProduct.product_name.ilike(f'%{search_query}%')
+                        MasterProduct.product_name.ilike(f'%{search_query}%'),
+                        MasterProduct.wholesale_name.ilike(f'%{search_query}%')
                     )
+                results = db.query(MasterProduct).filter(
+                    search_filter
                 ).order_by(MasterProduct.brand, MasterProduct.product_name).limit(500).all()
 
             if results:
-                st.write(f"**검색 결과:** {len(results)}건 (최대 500건 표시)")
+                col_info, col_all = st.columns([3, 1])
+                col_info.write(f"**검색 결과:** {len(results)}건 (최대 500건 표시) — 검색 컬럼: `{search_col_saved}`")
+                select_all = col_all.checkbox("☑️ 전체 선택/해제", key="search_select_all")
+
                 df_results = pd.DataFrame([{
-                    "선택": False,
+                    "선택": select_all,
                     "ID": r.id,
                     "브랜드": r.brand or '',
                     "상품명": r.product_name or '',
