@@ -2,10 +2,21 @@
 import re
 
 
+# 빈값으로 취급할 문자열 목록
+_EMPTY_VALUES = {'nan', 'none', 'n/a', 'na', '-', '--', '없음', '미입력', ''}
+
+
+def _is_empty(val) -> bool:
+    """빈값 여부 확인 (nan, None, 없음, N/A 등 다양한 표기 포함)"""
+    if val is None:
+        return True
+    return str(val).strip().lower() in _EMPTY_VALUES
+
+
 def normalize_for_comparison(val):
     """비교를 위해 괄호 앞부분 추출, 공백 제거, 소문자화, ~를 -로, 끝 호/호수 제거"""
     if not val: return ""
-    v = str(val).split('(')[0].strip()
+    v = str(val).split('(')[0].split('\uff08')[0].strip()  # 반각·전각 괄호 모두 제거
     v = v.lower().replace(" ", "")
     v = v.replace("~", "-")
     v = re.sub(r'호수?$', '', v)  # 15호 → 15, 15호수 → 15
@@ -13,22 +24,24 @@ def normalize_for_comparison(val):
 
 
 def _clean_option_val(val: str) -> str:
-    """옵션값 전처리: 괄호 앞부분만 추출, ~를 -로 통일"""
-    return val.split('(')[0].strip().replace('~', '-')
+    """옵션값 전처리: 반각·전각 괄호 앞부분만 추출, ~를 -로 통일"""
+    return val.split('(')[0].split('\uff08')[0].strip().replace('~', '-')
 
 
 def parse_options(option_text):
     """발주서 옵션 텍스트에서 색상/사이즈 분리"""
-    if not option_text or str(option_text).lower() == 'nan':
+    if _is_empty(option_text):
         return "", ""
     text = str(option_text).strip()
     color, size = "", ""
-    c_m = re.search(r'(?:색상|컬러|Color)\s*[=:]\s*([^,/]+)', text, re.IGNORECASE)
-    s_m = re.search(r'(?:사이즈|Size)\s*[=:]\s*([^,/]+)', text, re.IGNORECASE)
+    # 색상/컬러/Color/Colour 라벨 지원 (한글·영문·대소문자 혼용 모두 처리)
+    c_m = re.search(r'(?:색상|컬러|Colou?r)\s*[=:]\s*([^,/;]+)', text, re.IGNORECASE)
+    # 사이즈/Size 라벨 지원
+    s_m = re.search(r'(?:사이즈|Size)\s*[=:]\s*([^,/;]+)', text, re.IGNORECASE)
     if c_m: color = _clean_option_val(c_m.group(1).strip())
     if s_m: size = _clean_option_val(s_m.group(1).strip())
     if not color and not size:
-        parts = re.split(r'[/|-]', text)
+        parts = re.split(r'[/|;|-]', text)
         if len(parts) >= 2:
             color, size = _clean_option_val(parts[0].strip()), _clean_option_val(parts[1].strip())
         else:
