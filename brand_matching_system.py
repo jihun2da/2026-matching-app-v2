@@ -120,6 +120,11 @@ class BrandMatchingSystem:
             if len(sheet1_df.columns) >= 5:
                 raw_full = str(row.iloc[4]).strip()
 
+                # 두 번째 공백 이후 값 제거 (사이즈범위·부가정보 등 불필요 값 삭제)
+                # 예: "보니토 크레용티 12M~XL" → "보니토 크레용티"
+                # 예: "버킷리스트 바스락카고팬츠(S~XL) 여름" → "버킷리스트 바스락카고팬츠(S~XL)"
+                raw_full = ' '.join(raw_full.split(' ', 2)[:2])
+
                 # 첫 번째 공백을 기준으로 브랜드명 / 상품명 분리
                 parts = raw_full.split(' ', 1)
                 if len(parts) == 2:
