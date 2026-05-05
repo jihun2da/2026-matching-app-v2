@@ -314,10 +314,11 @@ elif menu == "📊 DB 연동 상태":
     else:
         st.warning("⚠️ DB에 데이터가 없거나 연결에 실패했습니다.")
 
-    tab_search, tab_date, tab_upload = st.tabs([
+    tab_search, tab_date, tab_upload, tab_replace = st.tabs([
         "🔍 검색 및 삭제",
         "📅 날짜별 관리",
-        "📥 신규 DB 업로드"
+        "📥 신규 DB 업로드",
+        "📤 DB 다운로드/교체"
     ])
 
     # ──────────────────────────────────────────
@@ -597,3 +598,100 @@ elif menu == "📊 DB 연동 상태":
                 st.rerun()
             except Exception as e:
                 st.error(f"오류: {e}")
+
+    # ──────────────────────────────────────────
+    # 탭 4: DB 다운로드 / 전체 교체
+    # ──────────────────────────────────────────
+    with tab_replace:
+
+        # ── 섹션 1: 현재 DB 엑셀 다운로드 ──────
+        st.subheader("📥 현재 DB 엑셀 다운로드")
+        st.caption("현재 저장된 마스터 DB 전체를 엑셀로 받아서 수정하세요.")
+
+        with get_db() as db:
+            all_products = db.query(MasterProduct).order_by(MasterProduct.brand).all()
+
+        if all_products:
+            df_download = pd.DataFrame([{
+                "브랜드":   p.brand,
+                "상품명":   p.product_name,
+                "옵션입력": p.options,
+                "중도매":   p.wholesale_name,
+                "공급가":   p.supply_price,
+            } for p in all_products])
+
+            buf = BytesIO()
+            with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+                df_download.to_excel(writer, index=False, sheet_name="마스터DB")
+            buf.seek(0)
+
+            st.info(f"현재 DB 총 **{len(all_products):,}건**")
+            st.download_button(
+                label="⬇️ 마스터 DB 엑셀 다운로드",
+                data=buf,
+                file_name=f"master_db_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+        else:
+            st.warning("저장된 데이터가 없습니다.")
+
+        st.markdown("---")
+
+        # ── 섹션 2: DB 전체 교체 ────────────────
+        st.subheader("🔄 DB 전체 교체")
+        st.caption("다운로드한 엑셀을 수정한 뒤 업로드하면 **기존 DB 전체가 삭제**되고 새 데이터로 교체됩니다.")
+        st.warning("⚠️ 교체 시 기존 데이터는 **완전히 삭제**됩니다. 반드시 다운로드 백업 후 진행하세요.")
+
+        replace_file = st.file_uploader(
+            "교체할 마스터 DB 엑셀 업로드 (컬럼: 브랜드 / 상품명 / 옵션입력 / 중도매 / 공급가)",
+            type=["xlsx"],
+            key="replace_db_uploader"
+        )
+
+        if replace_file:
+            try:
+                df_new = pd.read_excel(replace_file)
+                valid_rows = df_new[df_new["브랜드"].astype(str).str.strip().replace("nan", "") != ""]
+                st.info(f"업로드된 파일: **{len(valid_rows)}건** 유효 데이터 확인됨")
+                st.dataframe(df_new.head(5), use_container_width=True, hide_index=True)
+            except Exception as e:
+                st.error(f"파일 읽기 오류: {e}")
+                valid_rows = None
+
+            if valid_rows is not None and not valid_rows.empty:
+                confirm = st.checkbox("기존 DB를 모두 삭제하고 위 데이터로 교체하는 것에 동의합니다.")
+                if confirm and st.button("🔄 DB 전체 교체 실행", type="primary", key="btn_replace_db", use_container_width=True):
+                    try:
+                        upload_time = datetime.utcnow()
+                        with get_db() as db:
+                            deleted = db.query(MasterProduct).delete(synchronize_session=False)
+                            db.commit()
+
+                        with get_db() as db:
+                            count = 0
+                            for _, r in valid_rows.iterrows():
+                                b_val = str(r.get("브랜드", "")).strip()
+                                if not b_val or b_val == "nan":
+                                    continue
+                                raw_price = str(r.get("공급가", "0")).replace(",", "").strip()
+                                try:
+                                    price_val = float(raw_price)
+                                except ValueError:
+                                    price_val = 0.0
+                                db.add(MasterProduct(
+                                    brand=b_val,
+                                    product_name=str(r.get("상품명", "")).strip(),
+                                    options=str(r.get("옵션입력", "")).strip(),
+                                    wholesale_name=str(r.get("중도매", "")).strip(),
+                                    supply_price=price_val,
+                                    uploaded_at=upload_time
+                                ))
+                                count += 1
+                            db.commit()
+
+                        st.success(f"✅ 기존 {deleted:,}건 삭제 → 새 데이터 {count:,}건 저장 완료!")
+                        st.cache_resource.clear()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"교체 중 오류 발생: {e}")
