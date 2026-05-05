@@ -17,15 +17,25 @@ def remove_front_parentheses(product_name):
 
 
 def remove_size_range_from_product(product_name):
-    """상품명 뒤에 붙은 사이즈 범위 패턴 제거
-    예: 크레용티 12M~XL  → 크레용티
-        반팔티 S~XL      → 반팔티
-        원피스 90~130    → 원피스
-        바지 XS~XXL     → 바지
-    패턴: 공백 + 영숫자 + ~ + 영숫자 (문자열 끝)
+    """상품명 뒤에 붙은 사이즈 범위 패턴 제거 (3가지 형태 모두 처리)
+
+    1. 공백 + 범위 (~ 또는 -): "크레용티 12M~XL" → "크레용티"
+                               "매쉬티 S-XL"      → "매쉬티"
+                               "스커트 3~4호"     → "스커트"
+    2. 공백 + 괄호범위:        "팬츠 (JS~JXL)"   → "팬츠"
+    3. 단어 끝 괄호범위:       "나시(S~XL)"      → "나시"
+                               "팬츠(JS~JL)"     → "팬츠"
+                               "세트(5~11)"      → "세트"
     """
     if not product_name: return product_name
-    return re.sub(r'\s+[A-Za-z0-9]+~[A-Za-z0-9]+$', '', product_name).strip()
+    result = product_name
+    # 1. 공백 + 사이즈범위 (~ 또는 -) + 선택적 '호': " JS~JXL", " S-XL", " 3~4호"
+    result = re.sub(r'\s+[A-Za-z0-9]+[~-][A-Za-z0-9]+호?$', '', result)
+    # 2. 공백 + 괄호로 감싼 사이즈범위: " (JS~JXL)", " (S-XL)"
+    result = re.sub(r'\s+\([A-Za-z0-9]+[~-][A-Za-z0-9]+\)$', '', result)
+    # 3. 단어에 바로 붙은 끝 괄호 사이즈범위: "나시(S~XL)", "팬츠(9~13)"
+    result = re.sub(r'\([A-Za-z0-9]+[~-][A-Za-z0-9]+\)$', '', result)
+    return result.strip()
 
 
 def remove_keywords(product_name, keyword_list):
