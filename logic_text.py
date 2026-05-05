@@ -16,6 +16,18 @@ def remove_front_parentheses(product_name):
     return re.sub(r'^\s*\([^)]*\)\s*', '', product_name).strip()
 
 
+def remove_size_range_from_product(product_name):
+    """상품명 뒤에 붙은 사이즈 범위 패턴 제거
+    예: 크레용티 12M~XL  → 크레용티
+        반팔티 S~XL      → 반팔티
+        원피스 90~130    → 원피스
+        바지 XS~XXL     → 바지
+    패턴: 공백 + 영숫자 + ~ + 영숫자 (문자열 끝)
+    """
+    if not product_name: return product_name
+    return re.sub(r'\s+[A-Za-z0-9]+~[A-Za-z0-9]+$', '', product_name).strip()
+
+
 def remove_keywords(product_name, keyword_list):
     """
     제외 키워드 제거.

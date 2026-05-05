@@ -120,22 +120,21 @@ class BrandMatchingSystem:
             if len(sheet1_df.columns) >= 5:
                 raw_full = str(row.iloc[4]).strip()
 
-                # 두 번째 공백 이후 값 제거 (사이즈범위·부가정보 등 불필요 값 삭제)
-                # 예: "보니토 크레용티 12M~XL" → "보니토 크레용티"
-                # 예: "버킷리스트 바스락카고팬츠(S~XL) 여름" → "버킷리스트 바스락카고팬츠(S~XL)"
-                raw_full = ' '.join(raw_full.split(' ', 2)[:2])
-
                 # 첫 번째 공백을 기준으로 브랜드명 / 상품명 분리
                 parts = raw_full.split(' ', 1)
                 if len(parts) == 2:
                     sheet2_row['H열(브랜드)'] = lt.remove_size_patterns_from_brand(parts[0])
                     sheet2_row['I열(상품명)'] = lt.remove_keywords(
-                        lt.remove_front_parentheses(parts[1]), self.keyword_list
+                        lt.remove_front_parentheses(
+                            lt.remove_size_range_from_product(parts[1])
+                        ), self.keyword_list
                     )
                 else:
                     sheet2_row['H열(브랜드)'] = ""
                     sheet2_row['I열(상품명)'] = lt.remove_keywords(
-                        lt.remove_front_parentheses(raw_full), self.keyword_list
+                        lt.remove_front_parentheses(
+                            lt.remove_size_range_from_product(raw_full)
+                        ), self.keyword_list
                     )
 
             if len(sheet1_df.columns) >= 6:
